@@ -1,0 +1,511 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus
+  namespace: prometheus
+data:
+  alerting_rules.yml: |
+    {}
+  alerts: |
+    {}
+  prometheus.yml: |
+    global:
+      evaluation_interval: 15s
+      scrape_interval: 15s
+      scrape_timeout: 10s
+    rule_files:
+    - /etc/config/recording_rules.yml
+    - /etc/prometheus/rules/prometheus_alert.rules
+    scrape_configs:
+    - job_name: prometheus
+      static_configs:
+      - targets:
+        - localhost:9090
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-apiservers
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: keep
+        regex: default;kubernetes;https
+        source_labels:
+        - __meta_kubernetes_namespace
+        - __meta_kubernetes_service_name
+        - __meta_kubernetes_endpoint_port_name
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-nodes
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      job_name: kubernetes-nodes-cadvisor
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+    - job_name: kubernetes-service-endpoints
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (https?)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scheme
+        target_label: __scheme__
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: kubernetes_node
+      - action: labelmap
+        regex: __meta_kubernetes_pod_host_ip
+        replacement: node
+    - job_name: kubernetes-service-endpoints-slow
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scrape_slow
+      - action: replace
+        regex: (https?)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scheme
+        target_label: __scheme__
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: kubernetes_node
+      scrape_interval: 5m
+      scrape_timeout: 30s
+    - honor_labels: true
+      job_name: prometheus-pushgateway
+      kubernetes_sd_configs:
+      - role: service
+      relabel_configs:
+      - action: keep
+        regex: pushgateway
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_probe
+    - job_name: kubernetes-services
+      kubernetes_sd_configs:
+      - role: service
+      metrics_path: /probe
+      params:
+        module:
+        - http_2xx
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_probe
+      - source_labels:
+        - __address__
+        target_label: __param_target
+      - replacement: blackbox
+        target_label: __address__
+      - source_labels:
+        - __param_target
+        target_label: instance
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: kubernetes_pod_name
+    - job_name: kubernetes-pods-slow
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_scrape_slow
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: kubernetes_pod_name
+      scrape_interval: 5m
+      scrape_timeout: 30s
+    alerting:
+      alertmanagers:
+      - kubernetes_sd_configs:
+          - role: pod
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace]
+          regex: monitoring
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_label_component]
+          regex: alertmanager
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_probe]
+          regex: .*
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_container_port_number]
+          regex:
+          action: drop
+  recording_rules.yml: |
+    groups:
+    - name: edgems
+      rules:
+      - record: edgems_oldest_pod_created_time
+        expr: min by (namespace, pod) (kube_pod_created)
+      - record: edgems_pod_info
+        expr: group by (namespace, node, pod) (label_replace(kube_pod_info,"node","$1","exported_node","(.*)"))
+      - record: edgems_pod_container_num
+        expr: count by (namespace, pod) (kube_pod_container_info)
+      - record: edgems_pod_container_terminated_reason
+        expr: sum by (namespace, pod, reason) (kube_pod_container_status_terminated_reason)
+      - record: edgems_pod_cpu_limits_cores
+        expr: sum by (namespace, pod) (kube_pod_container_resource_limits_cpu_cores)
+      - record: edgems_pod_cpu_requests_cores
+        expr: sum by (namespace, pod) (kube_pod_container_resource_requests_cpu_cores)
+      - record: edgems_pod_cpu_used_cores
+        expr: sum by (namespace, pod) (irate(container_cpu_usage_seconds_total{image!="",name!~"^k8s_POD_.*",pod!=""}[1m]))
+      - record: edgems_pod_memory_limits_bytes
+        expr: sum by (namespace, pod) (kube_pod_container_resource_limits_memory_bytes)
+      - record: edgems_pod_memory_requests_bytes
+        expr: sum by (namespace, pod) (kube_pod_container_resource_requests_memory_bytes)
+      - record: edgems_pod_memory_real_used_bytes
+        expr: sum by (namespace, pod) (container_memory_usage_bytes{image!="",name!~"^k8s_POD_.*",pod!=""} - container_memory_cache{image!="",name!~"^k8s_POD_.*",pod!=""})
+      - record: edgems_pod_fs_reads_bytes
+        expr: sum by (namespace, pod) (container_fs_reads_bytes_total{image!="",name!~"^k8s_POD_.*",pod!=""})
+      - record: edgems_pod_fs_writes_bytes
+        expr: sum by (namespace, pod) (container_fs_writes_bytes_total{image!="",name!~"^k8s_POD_.*",pod!=""})
+      - record: edgems_pod_fs_used_bytes
+        expr: sum by (namespace, pod) (container_fs_usage_bytes{image!="",name!~"^k8s_POD_.*",pod!=""})
+      - record: edgems_pod_network_receive_bps
+        expr: sum by (namespace, pod) (irate(container_network_receive_bytes_total{id!="/"}[1m])) * 8
+      - record: edgems_pod_network_send_bps
+        expr: sum by (namespace, pod) (irate(container_network_transmit_bytes_total{id!="/"}[1m])) * 8
+      - record: edgems_pod_labels
+        expr: group by (namespace, label_psm, label_paas_cluster, pod) (kube_pod_labels)
+      - record: edgems_node_labels
+        expr: group without (app_kubernetes_io_managed_by, exported_node, instance, job, kubernetes_name, kubernetes_namespace, kubernetes_node, label_beta_kubernetes_io_arch, label_beta_kubernetes_io_os, label_kubernetes_io_arch, label_kubernetes_io_hostname, label_kubernetes_io_os) (label_replace(kube_node_labels,"node","$1","exported_node","(.*)"))
+      - record: edgems_node_condition
+        expr: max by (condition, status, node) (label_replace(kube_node_status_condition,"node","$1","exported_node","(.*)"))
+      - record: edgems_node_cpu_used_cores
+        expr: sum by (mode, node) (irate(node_cpu_seconds_total{mode=~"system|user|iowait|idle"}[1m]))
+      - record: edgems_node_cpu_cores
+        expr: count by (node) (node_cpu_seconds_total{mode=~"idle"})
+      - record: edgems_node_memory_total_bytes
+        expr: sum by (node) (node_memory_MemTotal_bytes)
+      - record: edgems_node_memory_cached_bytes
+        expr: sum by (node) (node_memory_Cached_bytes)
+      - record: edgems_node_memory_available_bytes
+        expr: sum by (node) (node_memory_MemAvailable_bytes)
+      - record: edgems_node_fs_size_bytes
+        expr: sum by (node, device, mountpoint) (node_filesystem_size_bytes{fstype=~"ext4|xfs"})
+      - record: edgems_node_fs_free_bytes
+        expr: sum by (node, device, mountpoint) (node_filesystem_free_bytes{fstype=~"ext4|xfs"})
+      - record: edgems_node_load1
+        expr: sum by (node) (node_load1)
+      - record: edgems_node_load5
+        expr: sum by (node) (node_load5)
+      - record: edgems_node_load15
+        expr: sum by (node) (node_load15)
+      - record: edgems_node_filefd_allocated
+        expr: sum by (node) (node_filefd_allocated)
+      - record: edgems_node_disk_reads_iops
+        expr: sum by (node) (irate(node_disk_reads_completed_total[1m]))
+      - record: edgems_node_disk_writes_iops
+        expr: sum by (node) (irate(node_disk_writes_completed_total[1m]))
+      - record: edgems_node_disk_read_time_rate
+        expr: sum by (node) (irate(node_disk_read_time_seconds_total[1m]))
+      - record: edgems_node_disk_write_time_rate
+        expr: sum by (node) (irate(node_disk_write_time_seconds_total[1m]))
+      - record: edgems_node_disk_read_Bps
+        expr: sum by (node) (irate(node_disk_read_bytes_total[1m]))
+      - record: edgems_node_disk_written_Bps
+        expr: sum by (node) (irate(node_disk_written_bytes_total[1m]))
+      - record: edgems_node_network_receive_bytes_bps
+        expr: sum by (node) (irate(node_network_receive_bytes_total{device!~"tap.*|veth.*|br.*|docker.*|virbr*|lo*"}[1m])) * 8
+      - record: edgems_node_network_send_bytes_bps
+        expr: sum by (node) (irate(node_network_transmit_bytes_total{device!~"tap.*|veth.*|br.*|docker.*|virbr*|lo*"}[1m])) * 8
+      - record: edgems_node_netstat_tcp_tw
+        expr: sum by (node) (node_sockstat_TCP_tw)
+      - record: edgems_node_netstat_sockets_used
+        expr: sum by (node) (node_sockstat_sockets_used)
+      - record: edgems_node_netstat_udp_inuse
+        expr: sum by (node) (node_sockstat_UDP_inuse)
+      - record: edgems_node_netstat_tcp_alloc
+        expr: sum by (node) (node_sockstat_TCP_alloc)
+      - record: edgems_node_boot_time_seconds
+        expr: min by (node) (node_boot_time_seconds)
+      - record: edgems_process_start_time_seconds
+        expr: min by (node, groupname) (edge_service_oldest_start_time_seconds)
+      - record: edgems_process_num_threads
+        expr: sum by (node, groupname) (edge_service_num_threads)
+      - record: edgems_process_cpu_used_cores
+        expr: sum by (node, groupname) (irate(edge_service_cpu_seconds_total[1m]))
+      - record: edgems_process_disk_write_Bps
+        expr: sum by (node, groupname) (irate(edge_service_write_bytes_total[1m]))
+      - record: edgems_process_disk_read_Bps
+        expr: sum by (node, groupname) (irate(edge_service_read_bytes_total[1m]))
+      - record: edgems_process_resident_memory_bytes
+        expr: sum by (node, groupname) (edge_service_memory_bytes{memtype="resident"})
+      - record: edgems_process_virtual_memory_bytes
+        expr: sum by (node, groupname) (edge_service_memory_bytes{memtype="virtual"})
+  rules: |
+    {}
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  namespace: prometheus
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - nodes/proxy
+      - nodes/metric
+      - services
+      - endpoints
+      - pods
+      - ingresses
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "extensions"
+    resources:
+      - ingresses/status
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - nonResourceURLs:
+      - "/metrics"
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  namespace: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: prometheus
+spec:
+  ports:
+    - port: 9090
+  selector:
+    component: prometheus
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: prometheus
+spec:
+  selector:
+    matchLabels:
+      component: prometheus
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        component: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.24.1
+          args:
+            - --storage.tsdb.retention.time=15d
+            - --config.file=/etc/config/prometheus.yml
+            - --storage.tsdb.path=/data
+            - --web.console.libraries=/etc/prometheus/console_libraries
+            - --web.console.templates=/etc/prometheus/consoles
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 3
+            successThreshold: 1
+          resources:
+            requests:
+              cpu: 500m
+              memory: 4G
+          volumeMounts:
+            - name: config
+              mountPath: /etc/config
+            - name: prometheus-alert-rule
+              mountPath: /etc/prometheus/rules/
+            - name: data
+              mountPath: /data
+      securityContext:
+        fsGroup: 0
+        runAsGroup: 0
+        runAsNonRoot: false
+        runAsUser: 0
+      terminationGracePeriodSeconds: 300
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus
+        - name: data
+          emptyDir: {}
+        - name: prometheus-alert-rule
+          emptyDir: {}

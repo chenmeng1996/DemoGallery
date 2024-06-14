@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project>
+    <Target Name="Go" BeforeTargets="Build">
+        <Message Text="Name=$(Name)" />
+    </Target>
+</Project>

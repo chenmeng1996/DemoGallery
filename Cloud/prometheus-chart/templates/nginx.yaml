@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx
+  namespace: prometheus
+data:
+  nginx.conf: |
+    server {
+        listen 80;
+        access_log /var/log/nginx/access.log main;
+        error_log /var/log/nginx/error.log;
+
+        auth_basic "Administrator's Area";
+        auth_basic_user_file /etc/nginx/auth/passwd;
+
+        location /prometheus/ {
+            proxy_pass http://prometheus:9090/;
+        }
+
+        location / {
+            proxy_pass http://prometheus:9090/;
+        }
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nginx
+  namespace: prometheus
+data:
+  passwd: YWRtaW46JGFwcjEkRmNTR3I4alAkTVgvL3YyT2tWaUhGUmdQRk9kaXE2MAo=
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: prometheus
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      nodePort: 32500
+  selector:
+    component: nginx-proxy
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      component: nginx-proxy
+  template:
+    metadata:
+      labels:
+        component: nginx-proxy
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.19.5
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - mountPath: /etc/nginx/conf.d
+              name: nginx-configs
+            - mountPath: /etc/nginx/auth
+              name: secret-volume
+      volumes:
+        - name: nginx-configs
+          configMap:
+            name: nginx
+        - name: secret-volume
+          secret:
+            defaultMode: 420
+            secretName: nginx

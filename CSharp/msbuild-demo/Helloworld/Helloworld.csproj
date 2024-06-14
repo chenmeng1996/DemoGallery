@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <AssemblyName>MSBuildSample</AssemblyName>
+        <OutputPath>bin\</OutputPath>
+        <TargetFramework>net472</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <Name>HelloWorld</Name>
+    </PropertyGroup>
+
+    <!-- <ItemGroup>
+        <ProjectReference Include="..\CommonTarget\CommonTarget.csproj" />
+    </ItemGroup> -->
+
+    <Import Project="..\CommonTarget\Common.targets"></Import>
+</Project>

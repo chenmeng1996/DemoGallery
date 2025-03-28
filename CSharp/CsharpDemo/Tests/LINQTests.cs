@@ -1,7 +1,9 @@
 namespace LINQ;
 
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using String = System.String;
 
 [TestClass]
 public class UnitTest1
@@ -62,6 +64,14 @@ public class UnitTest1
         {
             Console.WriteLine(item);
         }
+    }
+    
+    [TestMethod]
+    public void Test4()
+    {
+        List<string> list = new List<string>() { "a", "b" };
+        var res = list.Contains("a");
+        Console.WriteLine(res);
     }
 
     static IEnumerable<string> Suits()
